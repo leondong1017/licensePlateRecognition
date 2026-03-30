@@ -15,7 +15,7 @@
 
     <!-- Upload state -->
     <div v-if="activeTab === 'upload'" class="tab-content">
-      <UploadZone @file-selected="onFileSelected" />
+      <UploadZone @file-selected="onFileSelected" @file-removed="onFileRemoved" />
 
       <RoiSelector
         v-if="showRoi && previewUrl"
@@ -93,6 +93,13 @@ function onFileSelected(file: File) {
   roi.value = null
 }
 
+function onFileRemoved() {
+  selectedFile.value = null
+  previewUrl.value = ''
+  showRoi.value = false
+  roi.value = null
+}
+
 async function submit() {
   if (!selectedFile.value) return
   loading.value = true
@@ -108,7 +115,19 @@ async function submit() {
     }
     activeTab.value = 'result'
   } catch (e: any) {
-    alert(e?.response?.data?.detail ?? '识别失败，请重试')
+    const detail = e?.response?.data?.detail
+    const status = e?.response?.status
+    let msg = '识别失败，请重试'
+    if (status === 503) {
+      msg = `识别引擎未就绪\n\n${detail ?? '后端服务异常'}\n\n解决方法：重启后端服务（uvicorn main:app --reload）`
+    } else if (status === 400) {
+      msg = detail ?? '图片格式不支持或文件过大'
+    } else if (status === 500) {
+      msg = '服务器内部错误，请检查后端日志'
+    } else if (!status) {
+      msg = '无法连接后端服务，请确认后端已启动（端口 8000）'
+    }
+    alert(msg)
   } finally {
     loading.value = false
   }

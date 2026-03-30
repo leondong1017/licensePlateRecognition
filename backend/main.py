@@ -50,8 +50,16 @@ async def _save_image(raw_bytes: bytes) -> str:
         f.write(raw_bytes)
     return filename
 
+def _check_service():
+    if recognize_service is None:
+        raise HTTPException(
+            503,
+            detail="识别引擎未能正常启动（可能是 onnxruntime/numpy 版本冲突），请检查后端日志或重启服务。"
+        )
+
 @app.post("/api/recognize", response_model=RecognizeResponse)
 async def recognize(image: UploadFile = File(...)):
+    _check_service()
     img, raw = await _read_image(image)
     filename = await _save_image(raw)
     result = recognize_service.recognize(img)
@@ -64,6 +72,7 @@ async def recognize_roi(
     roi_x: int = Query(...), roi_y: int = Query(...),
     roi_w: int = Query(...), roi_h: int = Query(...)
 ):
+    _check_service()
     img, raw = await _read_image(image)
     filename = await _save_image(raw)
     result = recognize_service.recognize(img, roi=[roi_x, roi_y, roi_w, roi_h])
