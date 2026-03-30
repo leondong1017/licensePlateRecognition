@@ -1,0 +1,9 @@
+:root {
+  --td-brand-color: #1a1a1a;
+  --td-brand-color-hover: #333333;
+  --td-brand-color-active: #000000;
+  --td-brand-color-disabled: #cccccc;
+  --td-brand-color-light: #f5f5f5;
+  --td-brand-color-light-hover: #ebebeb;
+  --td-brand-color-focus: rgba(26, 26, 26, 0.1);
+}
