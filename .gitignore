@@ -1,0 +1,19 @@
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+backend/lpr.db
+backend/images/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
