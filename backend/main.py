@@ -62,7 +62,10 @@ async def recognize(image: UploadFile = File(...)):
     _check_service()
     img, raw = await _read_image(image)
     filename = await _save_image(raw)
-    result = recognize_service.recognize(img)
+    try:
+        result = recognize_service.recognize(img)
+    except Exception as e:
+        raise HTTPException(500, detail=f"识别引擎运行出错：{e}。建议重启后端服务（uvicorn main:app --reload）。")
     record_id = db.insert_record(filename, result["plates"], result["used_sr"])
     return RecognizeResponse(record_id=record_id, **result)
 
@@ -75,7 +78,10 @@ async def recognize_roi(
     _check_service()
     img, raw = await _read_image(image)
     filename = await _save_image(raw)
-    result = recognize_service.recognize(img, roi=[roi_x, roi_y, roi_w, roi_h])
+    try:
+        result = recognize_service.recognize(img, roi=[roi_x, roi_y, roi_w, roi_h])
+    except Exception as e:
+        raise HTTPException(500, detail=f"识别引擎运行出错：{e}。建议重启后端服务（uvicorn main:app --reload）。")
     record_id = db.insert_record(filename, result["plates"], result["used_sr"])
     return RecognizeResponse(record_id=record_id, **result)
 

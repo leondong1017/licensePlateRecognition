@@ -15,7 +15,7 @@
 
     <!-- Upload state -->
     <div v-if="activeTab === 'upload'" class="tab-content">
-      <UploadZone @file-selected="onFileSelected" @file-removed="onFileRemoved" />
+      <UploadZone ref="uploadZoneRef" @file-selected="onFileSelected" @file-removed="onFileRemoved" />
 
       <RoiSelector
         v-if="showRoi && previewUrl"
@@ -74,6 +74,7 @@ import PlateCard from '../components/PlateCard.vue'
 import { recognizePlate } from '../api'
 import type { RecognizeResponse } from '../types'
 
+const uploadZoneRef = ref<InstanceType<typeof UploadZone> | null>(null)
 const activeTab = ref<'upload' | 'result'>('upload')
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
@@ -134,6 +135,7 @@ async function submit() {
 }
 
 function reset() {
+  uploadZoneRef.value?.removeFile()
   selectedFile.value = null
   previewUrl.value = ''
   showRoi.value = false
