@@ -1,5 +1,21 @@
 <template>
-  <div class="plate-card" :class="{ 'plate-card--primary': primary }">
+  <!-- Compact variant for history modal: gray bg, plate left, conf+time right, no progress bar -->
+  <div v-if="compact" class="plate-card plate-card--compact">
+    <PlateVisual
+      :province="plate.province"
+      :city-code="plate.city_code"
+      :number="plate.number"
+      :type="plate.type"
+      size="md"
+    />
+    <div class="compact-right">
+      <span class="compact-conf">{{ (plate.confidence * 100).toFixed(0) }}%</span>
+      <span class="compact-time" v-if="timestamp">{{ timestamp }}</span>
+    </div>
+  </div>
+
+  <!-- Full variant for recognition result -->
+  <div v-else class="plate-card">
     <div class="plate-display-row">
       <PlateVisual
         :province="plate.province"
@@ -39,6 +55,7 @@ import type { PlateResult } from '../types'
 
 defineProps<{
   plate: PlateResult
+  compact?: boolean
   primary?: boolean
   durationMs?: number
   timestamp?: string
@@ -46,8 +63,8 @@ defineProps<{
 </script>
 
 <style scoped>
+/* Full card */
 .plate-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 6px; padding: 18px; }
-.plate-card--primary { border-color: #1a1a1a; box-shadow: 0 0 0 3px rgba(0,0,0,.04); }
 .plate-display-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .type-label { font-size: 11px; color: #999; }
 .confidence-bar { height: 3px; background: #f0f0f0; border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
@@ -56,4 +73,25 @@ defineProps<{
 .confidence-label { font-size: 11px; color: #999; }
 .sr-notice { font-size: 12px; color: #e65c00; margin-top: 8px; padding: 6px 10px; background: #fff3e0; border-radius: 4px; }
 .info-row { display: flex; justify-content: space-between; font-size: 11px; color: #bbb; padding-top: 10px; border-top: 1px solid #f0f0f0; margin-top: 8px; }
+
+/* Compact card */
+.plate-card--compact {
+  background: #f5f5f5;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.compact-right {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.compact-conf { font-size: 13px; font-weight: 500; color: #1a1a1a; }
+.compact-time { font-size: 11px; color: #999; }
 </style>
+

@@ -52,16 +52,31 @@
             @click="selectPlate(i)"
           >
             <span class="plate-select-num">{{ i + 1 }}</span>
-            <PlateVisual :province="plate.province" :city-code="plate.city_code" :number="plate.number" :type="plate.type" size="md" />
-            <span class="plate-select-conf">{{ (plate.confidence * 100).toFixed(0) }}%</span>
+            <div class="plate-select-info">
+              <PlateVisual
+                :province="plate.province"
+                :city-code="plate.city_code"
+                :number="validatePlateNumber(plate.number, plate.type)"
+                :type="plate.type"
+                size="md"
+              />
+              <span
+                v-if="hasUncertainChars(validatePlateNumber(plate.number, plate.type))"
+                class="plate-uncertain-hint"
+              >含不确定字符，建议超分识别</span>
+            </div>
+            <span class="plate-select-conf" :class="{ 'conf-low': plate.confidence < 0.8 }">
+              {{ (plate.confidence * 100).toFixed(0) }}%
+            </span>
           </div>
           <div v-if="detectedPlates.length === 0" class="no-plate-notice">
             未检测到车牌，请尝试更换图片
           </div>
-          <div class="action-row" v-if="detectedPlates.length > 0">
-            <button class="btn btn-outline" @click="reset">重新上传</button>
+          <!-- 垂直按钮组，全宽与选牌卡一致 -->
+          <div class="action-col" v-if="detectedPlates.length > 0">
+            <button class="btn-full btn-full--outline" @click="reset">重新上传</button>
             <button
-              class="btn btn-primary"
+              class="btn-full btn-full--primary"
               :disabled="selectedPlateIndex === null || confirmLoading"
               @click="confirmRecognize"
             >{{ confirmLoading ? '超分识别中…' : '确认识别' }}</button>
@@ -93,6 +108,38 @@ import PlateCard from '../components/PlateCard.vue'
 import PlateVisual from '../components/PlateVisual.vue'
 import { recognizePlate, confirmPlate } from '../api'
 import type { PlateResult } from '../types'
+
+// ── 车牌格式校验 ────────────────────────────────────────────────
+// 国标字符集（排除 I、O）
+const VALID_CHARS = new Set('ABCDEFGHJKLMNPQRSTUVWXYZ0123456789')
+
+// 各牌型期望的 number 字段位数（即省/市码之后的字符数）
+const EXPECTED_NUMBER_LEN: Record<string, number> = {
+  blue: 5,        // 蓝牌  7 位 = 省(1)+市(1)+5
+  yellow: 5,      // 黄牌
+  white: 5,       // 警/军
+  black: 5,       // 使馆
+  green_small: 6, // 新能源小型 8 位，末位 D/F
+  unknown: 5,
+}
+
+function validatePlateNumber(number: string, type: string): string {
+  const expected = EXPECTED_NUMBER_LEN[type] ?? 5
+  const padded = number.padEnd(expected, '?')
+  const truncated = padded.slice(0, expected)
+  return truncated.split('').map((ch, idx) => {
+    if (ch === '?') return '?'
+    // 新能源末位只允许 D 或 F
+    if (type === 'green_small' && idx === expected - 1 && ch !== 'D' && ch !== 'F') return '?'
+    if (!VALID_CHARS.has(ch.toUpperCase())) return '?'
+    return ch
+  }).join('')
+}
+
+function hasUncertainChars(validated: string): boolean {
+  return validated.includes('?')
+}
+// ────────────────────────────────────────────────────────────────
 
 const activeTab = ref<'upload' | 'result'>('upload')
 const selectedFile = ref<File | null>(null)
@@ -286,7 +333,7 @@ function onSave() {
 .btn-primary:not(:disabled):hover { background: #333; }
 .btn-outline { background: #fff; color: #1a1a1a; border: 1px solid #d4d4d4; }
 .btn-outline:hover { border-color: #1a1a1a; }
-.result-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
+.result-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start; }
 .result-image-wrap { position: relative; border-radius: 6px; overflow: hidden; background: #111; }
 .result-image { display: block; width: 100%; max-height: 400px; object-fit: contain; }
 .bbox-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
@@ -297,8 +344,20 @@ function onSave() {
 .plate-select-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #e8e8e8; border-radius: 6px; cursor: pointer; transition: all .15s; }
 .plate-select-card:hover { border-color: #1a1a1a; background: #fafafa; }
 .plate-select-card.selected { border-color: #1a1a1a; border-width: 2px; background: #f5f5f5; }
-.plate-select-num { font-size: 13px; font-weight: 700; color: #999; width: 18px; text-align: center; }
+.plate-select-num { font-size: 13px; font-weight: 700; color: #999; width: 18px; text-align: center; flex-shrink: 0; }
 .plate-select-card.selected .plate-select-num { color: #1a1a1a; }
-.plate-select-conf { font-size: 12px; color: #999; margin-left: auto; }
+.plate-select-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.plate-select-conf { font-size: 12px; color: #999; flex-shrink: 0; }
+.plate-select-conf.conf-low { color: #e65c00; font-weight: 500; }
+.plate-uncertain-hint { font-size: 11px; color: #e65c00; }
 .no-plate-notice { font-size: 13px; color: #e65c00; padding: 12px; background: #fff3e0; border-radius: 4px; }
+
+/* Vertical full-width button group */
+.action-col { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.btn-full { width: 100%; padding: 10px 0; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; text-align: center; }
+.btn-full:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-full--outline { background: #fff; color: #1a1a1a; border: 1px solid #d4d4d4; }
+.btn-full--outline:hover { border-color: #1a1a1a; }
+.btn-full--primary { background: #1a1a1a; color: #fff; }
+.btn-full--primary:not(:disabled):hover { background: #333; }
 </style>

@@ -96,7 +96,7 @@
                 v-for="(plate, i) in detailRecord.plates"
                 :key="i"
                 :plate="plate"
-                :primary="i === 0"
+                :compact="true"
                 :timestamp="detailRecord.created_at"
               />
               <div v-if="detailRecord.plates.length === 0" style="color:#999;font-size:13px;padding:12px">
