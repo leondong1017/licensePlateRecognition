@@ -1,15 +1,18 @@
 import axios from 'axios'
-import type { RecognizeResponse, RecordsResponse } from '../types'
+import type { RecognizeResponse, RecordsResponse, RecordItem } from '../types'
 
-export async function recognizePlate(
-  file: File,
-  roi?: { x: number; y: number; w: number; h: number }
-): Promise<RecognizeResponse> {
+export async function recognizePlate(file: File): Promise<RecognizeResponse> {
   const form = new FormData()
   form.append('image', file)
-  const params = roi ? `?roi_x=${roi.x}&roi_y=${roi.y}&roi_w=${roi.w}&roi_h=${roi.h}` : ''
-  const endpoint = roi ? `/api/recognize/roi${params}` : '/api/recognize'
-  const { data } = await axios.post<RecognizeResponse>(endpoint, form)
+  const { data } = await axios.post<RecognizeResponse>('/api/recognize', form)
+  return data
+}
+
+export async function confirmPlate(recordId: number, plateIndex: number): Promise<RecognizeResponse> {
+  const { data } = await axios.post<RecognizeResponse>('/api/recognize/confirm', {
+    record_id: recordId,
+    plate_index: plateIndex,
+  })
   return data
 }
 
@@ -34,6 +37,11 @@ export async function listRecords(params: {
   return data
 }
 
-export function exportRecordsUrl(): string {
-  return '/api/records/export?format=csv'
+export async function getRecord(id: number): Promise<RecordItem> {
+  const { data } = await axios.get<RecordItem>(`/api/records/${id}`)
+  return data
+}
+
+export async function deleteRecord(id: number): Promise<void> {
+  await axios.delete(`/api/records/${id}`)
 }

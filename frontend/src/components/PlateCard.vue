@@ -13,7 +13,7 @@
     <div class="confidence-bar">
       <div
         class="confidence-fill"
-        :class="{ warn: plate.confidence < 0.9 }"
+        :class="{ warn: plate.confidence < 0.95 }"
         :style="{ width: (plate.confidence * 100) + '%' }"
       />
     </div>
