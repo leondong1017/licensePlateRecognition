@@ -9,7 +9,7 @@
       size="md"
     />
     <div class="compact-right">
-      <span class="compact-conf">{{ (plate.confidence * 100).toFixed(0) }}%</span>
+      <span class="compact-conf">置信度 {{ (plate.confidence * 100).toFixed(0) }}%</span>
       <span class="compact-time" v-if="timestamp">{{ timestamp }}</span>
     </div>
   </div>

@@ -44,35 +44,37 @@
 
         <!-- Before confirm: show all detected plates for selection -->
         <template v-if="!confirmedPlate">
-          <div
-            v-for="(plate, i) in detectedPlates"
-            :key="i"
-            class="plate-select-card"
-            :class="{ selected: selectedPlateIndex === i }"
-            @click="selectPlate(i)"
-          >
-            <span class="plate-select-num">{{ i + 1 }}</span>
-            <div class="plate-select-info">
-              <PlateVisual
-                :province="plate.province"
-                :city-code="plate.city_code"
-                :number="validatePlateNumber(plate.number, plate.type)"
-                :type="plate.type"
-                size="md"
-              />
-              <span
-                v-if="hasUncertainChars(validatePlateNumber(plate.number, plate.type))"
-                class="plate-uncertain-hint"
-              >含不确定字符，建议超分识别</span>
+          <div class="result-panel-top">
+            <div
+              v-for="(plate, i) in detectedPlates"
+              :key="i"
+              class="plate-select-card"
+              :class="{ selected: selectedPlateIndex === i }"
+              @click="selectPlate(i)"
+            >
+              <span class="plate-select-num">{{ i + 1 }}</span>
+              <div class="plate-select-info">
+                <PlateVisual
+                  :province="plate.province"
+                  :city-code="plate.city_code"
+                  :number="validatePlateNumber(plate.number, plate.type)"
+                  :type="plate.type"
+                  size="md"
+                />
+                <span
+                  v-if="hasUncertainChars(validatePlateNumber(plate.number, plate.type))"
+                  class="plate-uncertain-hint"
+                >含不确定字符，建议超分识别</span>
+              </div>
+              <span class="plate-select-conf" :class="{ 'conf-low': plate.confidence < 0.8 }">
+                {{ (plate.confidence * 100).toFixed(0) }}%
+              </span>
             </div>
-            <span class="plate-select-conf" :class="{ 'conf-low': plate.confidence < 0.8 }">
-              {{ (plate.confidence * 100).toFixed(0) }}%
-            </span>
+            <div v-if="detectedPlates.length === 0" class="no-plate-notice">
+              未检测到车牌，请尝试更换图片
+            </div>
           </div>
-          <div v-if="detectedPlates.length === 0" class="no-plate-notice">
-            未检测到车牌，请尝试更换图片
-          </div>
-          <!-- 垂直按钮组，全宽与选牌卡一致 -->
+          <!-- 垂直按钮组，全宽，底部对齐 -->
           <div class="action-col" v-if="detectedPlates.length > 0">
             <button class="btn-full btn-full--outline" @click="reset">重新上传</button>
             <button
@@ -333,20 +335,21 @@ function onSave() {
 .btn-primary:not(:disabled):hover { background: #333; }
 .btn-outline { background: #fff; color: #1a1a1a; border: 1px solid #d4d4d4; }
 .btn-outline:hover { border-color: #1a1a1a; }
-.result-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start; }
-.result-image-wrap { position: relative; border-radius: 6px; overflow: hidden; background: #111; }
+.result-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: stretch; }
+.result-image-wrap { position: relative; border-radius: 6px; overflow: hidden; background: #111; align-self: start; }
 .result-image { display: block; width: 100%; max-height: 400px; object-fit: contain; }
 .bbox-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
 .plate-count-tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,.65); color: #fff; font-size: 12px; padding: 3px 10px; border-radius: 4px; }
 .plate-count-tag.warn { color: #ffb84d; }
-.result-panel { display: flex; flex-direction: column; gap: 10px; }
+.result-panel { display: flex; flex-direction: column; gap: 10px; justify-content: space-between; }
+.result-panel-top { display: flex; flex-direction: column; gap: 10px; }
 .section-label { font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: .08em; }
 .plate-select-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #e8e8e8; border-radius: 6px; cursor: pointer; transition: all .15s; }
 .plate-select-card:hover { border-color: #1a1a1a; background: #fafafa; }
 .plate-select-card.selected { border-color: #1a1a1a; border-width: 2px; background: #f5f5f5; }
 .plate-select-num { font-size: 13px; font-weight: 700; color: #999; width: 18px; text-align: center; flex-shrink: 0; }
 .plate-select-card.selected .plate-select-num { color: #1a1a1a; }
-.plate-select-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.plate-select-info { display: flex; flex-direction: column; gap: 4px; flex: 1; align-items: flex-start; }
 .plate-select-conf { font-size: 12px; color: #999; flex-shrink: 0; }
 .plate-select-conf.conf-low { color: #e65c00; font-weight: 500; }
 .plate-uncertain-hint { font-size: 11px; color: #e65c00; }

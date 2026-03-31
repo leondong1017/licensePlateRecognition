@@ -47,7 +47,26 @@
             />
             <span v-else style="color:#999;font-size:12px">无</span>
           </td>
-          <td>{{ record.plates.length ? (record.plates[0].confidence * 100).toFixed(0) + '%' : '-' }}</td>
+          <td>
+            <template v-if="record.plates.length">
+              <!-- If SR applied, show before→after confidence -->
+              <template v-if="record.used_sr && record.plates[0].confidence_before_sr != null">
+                <span :class="record.plates[0].confidence_before_sr < 0.9 ? 'conf-low' : ''">
+                  {{ (record.plates[0].confidence_before_sr * 100).toFixed(0) }}%
+                </span>
+                <span style="color:#999;font-size:11px"> → </span>
+                <span :class="record.plates[0].confidence < 0.9 ? 'conf-low' : ''">
+                  {{ (record.plates[0].confidence * 100).toFixed(0) }}%
+                </span>
+              </template>
+              <template v-else>
+                <span :class="record.plates[0].confidence < 0.9 ? 'conf-low' : ''">
+                  {{ (record.plates[0].confidence * 100).toFixed(0) }}%
+                </span>
+              </template>
+            </template>
+            <span v-else>-</span>
+          </td>
           <td>
             <span :class="record.used_sr ? 'badge-warn' : 'badge-light'">
               {{ record.used_sr ? '是' : '否' }}
@@ -215,6 +234,7 @@ onMounted(load)
 .thumb { width: 54px; height: 34px; object-fit: cover; border-radius: 3px; background: #2b2b2b; display: block; }
 .badge-warn { background: #fff3e0; color: #e65c00; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
 .badge-light { background: #f0f0f0; color: #4a4a4a; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+.conf-low { color: #e37318; font-weight: 500; }
 .action-cell { display: flex; gap: 8px; align-items: center; }
 .link-btn { color: #1a1a1a; background: none; border: 1px solid #d4d4d4; cursor: pointer; font-size: 12px; padding: 4px 10px; border-radius: 3px; }
 .link-btn:hover { background: #f5f5f5; }
