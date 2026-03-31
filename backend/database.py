@@ -79,6 +79,15 @@ class Database:
                                   p["type_label"], p["confidence"], bool(row["used_sr"])])
         return buf.getvalue()
 
+    def delete_record(self, record_id: int):
+        """Delete a record and return its image_path, or None if not found."""
+        with self._conn() as conn:
+            row = conn.execute("SELECT image_path FROM records WHERE id=?", (record_id,)).fetchone()
+            if not row:
+                return None
+            conn.execute("DELETE FROM records WHERE id=?", (record_id,))
+            return row["image_path"]
+
     def _row_to_dict(self, row) -> Dict[str, Any]:
         d = dict(row)
         d["plates"] = json.loads(d["plates"])

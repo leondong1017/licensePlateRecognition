@@ -1,5 +1,5 @@
 # backend/main.py
-import os, uuid
+import os, uuid, json
 import cv2
 import numpy as np
 from typing import Optional
@@ -12,7 +12,7 @@ import io
 from config import config
 from database import Database
 from recognize import recognize_service
-from models import RecognizeResponse, RecordsResponse, RecordItem, PlateResult
+from models import RecognizeResponse, RecordsResponse, RecordItem, PlateResult, ConfirmRequest
 
 app = FastAPI(title="License Plate Recognition API")
 
@@ -85,6 +85,46 @@ async def recognize_roi(
     record_id = db.insert_record(filename, result["plates"], result["used_sr"])
     return RecognizeResponse(record_id=record_id, **result)
 
+@app.post("/api/recognize/confirm", response_model=RecognizeResponse)
+async def confirm_recognize(req: ConfirmRequest):
+    _check_service()
+    record = db.get_record(req.record_id)
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    plates = record["plates"]
+    if req.plate_index < 0 or req.plate_index >= len(plates):
+        raise HTTPException(400, f"plate_index 超出范围（共 {len(plates)} 张）")
+
+    img_path = os.path.join(config.images_dir, record["image_path"])
+    if not os.path.exists(img_path):
+        raise HTTPException(404, "原始图片文件不存在")
+
+    img = cv2.imread(img_path)
+    if img is None:
+        raise HTTPException(500, "无法读取原始图片")
+
+    bbox = plates[req.plate_index]["bbox"]
+    try:
+        sr_plate = recognize_service.recognize_with_sr(img, bbox)
+    except Exception as e:
+        raise HTTPException(500, detail=f"超分识别出错：{e}")
+
+    # Update the record with SR result
+    plates[req.plate_index] = sr_plate.model_dump()
+    with db._conn() as conn:
+        conn.execute(
+            "UPDATE records SET plates=?, used_sr=1 WHERE id=?",
+            (json.dumps(plates, ensure_ascii=False), req.record_id)
+        )
+
+    return RecognizeResponse(
+        record_id=req.record_id,
+        plates=[sr_plate],
+        used_sr=True,
+        duration_ms=0,
+        multi_vehicle=False,
+    )
+
 @app.get("/api/records", response_model=RecordsResponse)
 def list_records(
     page: int = Query(1, ge=1),
@@ -114,6 +154,30 @@ def export_records():
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=records.csv"}
     )
+
+@app.get("/api/records/{record_id}", response_model=RecordItem)
+def get_record_by_id(record_id: int):
+    record = db.get_record(record_id)
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    return RecordItem(
+        id=record["id"],
+        created_at=record["created_at"],
+        plates=[PlateResult(**p) for p in record["plates"]],
+        used_sr=record["used_sr"],
+        image_url=f"/api/images/{record['image_path']}",
+    )
+
+@app.delete("/api/records/{record_id}")
+def delete_record_by_id(record_id: int):
+    image_path = db.delete_record(record_id)
+    if image_path is None:
+        raise HTTPException(404, "记录不存在")
+    # Clean up image file
+    img_file = os.path.join(config.images_dir, image_path)
+    if os.path.exists(img_file):
+        os.remove(img_file)
+    return {"ok": True}
 
 # Add static file serving for images (must be after route definitions)
 if os.path.exists(config.images_dir):

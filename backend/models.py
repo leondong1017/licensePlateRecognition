@@ -48,3 +48,7 @@ class RecordItem(BaseModel):
 class RecordsResponse(BaseModel):
     total: int
     items: List[RecordItem]
+
+class ConfirmRequest(BaseModel):
+    record_id: int
+    plate_index: int

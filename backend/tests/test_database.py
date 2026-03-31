@@ -39,3 +39,13 @@ def test_export_csv(db):
     csv_str = db.export_csv()
     assert "粤B88888" in csv_str
     assert "id,created_at" in csv_str
+
+def test_delete_record(db):
+    rid = db.insert_record("img/1.jpg", [SAMPLE_PLATE], used_sr=False)
+    image_path = db.delete_record(rid)
+    assert image_path == "img/1.jpg"
+    assert db.get_record(rid) is None
+
+def test_delete_nonexistent(db):
+    result = db.delete_record(999)
+    assert result is None

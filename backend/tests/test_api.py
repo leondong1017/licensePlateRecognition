@@ -21,6 +21,14 @@ def client():
         mock_db.insert_record.return_value = 1
         mock_db.list_records.return_value = {"total": 0, "items": []}
         mock_db.export_csv.return_value = "id,created_at\n"
+        mock_db.delete_record.return_value = "img/test.jpg"
+        mock_db.get_record.return_value = {
+            "id": 1,
+            "created_at": "2026-01-01",
+            "plates": [],
+            "used_sr": False,
+            "image_path": "test.jpg",
+        }
         from fastapi.testclient import TestClient
         from main import app
         yield TestClient(app)
@@ -51,3 +59,14 @@ def test_records_export_csv(client):
     resp = client.get("/api/records/export")
     assert resp.status_code == 200
     assert "text/csv" in resp.headers["content-type"]
+
+def test_get_record(client):
+    resp = client.get("/api/records/1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == 1
+
+def test_delete_record(client):
+    resp = client.delete("/api/records/1")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
