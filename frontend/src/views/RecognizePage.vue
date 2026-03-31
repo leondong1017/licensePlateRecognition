@@ -124,7 +124,7 @@ async function submit() {
     } else if (status === 400) {
       msg = detail ?? '图片格式不支持或文件过大'
     } else if (status === 500) {
-      msg = '服务器内部错误，请检查后端日志'
+      msg = detail ?? '服务器内部错误，请检查后端日志'
     } else if (!status) {
       msg = '无法连接后端服务，请确认后端已启动（端口 8000）'
     }

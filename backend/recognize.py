@@ -6,18 +6,27 @@ from models import PlateResult, PlateType, PLATE_TYPE_LABELS
 from sr import sr_service
 from config import config
 
-_TYPE_MAP = {
-    "蓝牌": PlateType.blue,
-    "绿牌": PlateType.green_small,
-    "黄牌": PlateType.yellow,
-    "白牌": PlateType.white,
-    "黑牌": PlateType.black,
+# HyperLPR3 color_int → PlateType
+# Actual format: [text, confidence, color_int, [x1, y1, x2, y2]]
+# color constants: BLUE=0, YELLOW_SINGLE=1, WHILE_SINGLE=2, GREEN=3, BLACK_HK_MACAO=4
+_COLOR_MAP = {
+    0: PlateType.blue,
+    1: PlateType.yellow,
+    2: PlateType.white,
+    3: PlateType.green_small,
+    4: PlateType.black,
+    9: PlateType.yellow,   # YELLOW_DOUBLE
 }
 
 def _parse_text(text: str):
     if len(text) >= 2:
         return text[0], text[1], text[2:]
     return text, "", ""
+
+def _bbox_to_xywh(bbox: List[int]) -> List[int]:
+    """Convert [x1,y1,x2,y2] to [x,y,w,h]."""
+    x1, y1, x2, y2 = bbox
+    return [x1, y1, x2 - x1, y2 - y1]
 
 class RecognizeService:
     def __init__(self):
@@ -33,11 +42,15 @@ class RecognizeService:
         plates: List[PlateResult] = []
         used_sr = False
         for item in raw_results:
-            text, conf, bbox, type_str = item[0], float(item[1]), list(item[2]), item[3]
-            plate_type = _TYPE_MAP.get(type_str, PlateType.unknown)
+            # HyperLPR3 format: [text, confidence, color_int, [x1,y1,x2,y2]]
+            text = item[0]
+            conf = float(item[1])
+            color_int = int(item[2])
+            bbox_xywh = _bbox_to_xywh(list(item[3]))
+            plate_type = _COLOR_MAP.get(color_int, PlateType.unknown)
             conf_before_sr = None
             if conf < config.confidence_threshold:
-                enhanced = sr_service.enhance_crop_with_timeout(image_bgr, bbox)
+                enhanced = sr_service.enhance_crop_with_timeout(image_bgr, bbox_xywh)
                 if enhanced is not None:
                     re_results = self._catcher(enhanced)
                     if re_results:
@@ -55,7 +68,7 @@ class RecognizeService:
                 type_label=PLATE_TYPE_LABELS[plate_type],
                 confidence=conf,
                 confidence_before_sr=conf_before_sr,
-                bbox=bbox,
+                bbox=bbox_xywh,
             ))
         duration_ms = int((time.perf_counter() - start) * 1000)
         return {
