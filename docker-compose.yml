@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: lpr-backend
+    environment:
+      DB_PATH: /data/lpr.db
+      IMAGES_DIR: /data/images
+      HOST: 0.0.0.0
+      PORT: 8000
+    volumes:
+      - ./backend/data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: lpr-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped

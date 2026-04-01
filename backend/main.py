@@ -12,27 +12,49 @@ import io
 from config import config
 from database import Database
 from recognize import recognize_service
-from models import RecognizeResponse, RecordsResponse, RecordItem, PlateResult, ConfirmRequest
+from models import (
+    RecognizeResponse,
+    RecordsResponse,
+    RecordItem,
+    PlateResult,
+    ConfirmRequest,
+    FeedbackPatchRequest,
+)
 
 app = FastAPI(title="License Plate Recognition API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _record_to_item(record: dict) -> RecordItem:
+    uf = record.get("user_feedback")
+    if uf not in (None, "accurate", "inaccurate"):
+        uf = None
+    return RecordItem(
+        id=record["id"],
+        created_at=record["created_at"],
+        plates=[PlateResult(**p) for p in record["plates"]],
+        used_sr=record["used_sr"],
+        image_url=f"/api/images/{record['image_path']}",
+        user_feedback=uf,
+    )
 
 db = Database(config.db_path, config.images_dir)
 db.init()
 
 os.makedirs(config.images_dir, exist_ok=True)
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/bmp"}
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/bmp", "image/webp"}
+UPLOAD_IMAGE_DESC = "支持 JPG/PNG/BMP/WebP（静态），最大 20MB"
 
 async def _read_image(file: UploadFile):
     if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(400, "仅支持 JPG/PNG/BMP 格式")
+        raise HTTPException(400, "仅支持 JPG/PNG/BMP/WebP（静态）格式")
     data = await file.read()
     if len(data) > 20 * 1024 * 1024:
         raise HTTPException(400, "文件不超过 20MB")
@@ -58,7 +80,7 @@ def _check_service():
         )
 
 @app.post("/api/recognize", response_model=RecognizeResponse)
-async def recognize(image: UploadFile = File(...)):
+async def recognize(image: UploadFile = File(..., description=UPLOAD_IMAGE_DESC)):
     _check_service()
     img, raw = await _read_image(image)
     filename = await _save_image(raw)
@@ -71,7 +93,7 @@ async def recognize(image: UploadFile = File(...)):
 
 @app.post("/api/recognize/roi", response_model=RecognizeResponse)
 async def recognize_roi(
-    image: UploadFile = File(...),
+    image: UploadFile = File(..., description=UPLOAD_IMAGE_DESC),
     roi_x: int = Query(...), roi_y: int = Query(...),
     roi_w: int = Query(...), roi_h: int = Query(...)
 ):
@@ -135,15 +157,7 @@ def list_records(
     date_to: str = Query(""),
 ):
     raw = db.list_records(page, limit, plate, type, date_from, date_to)
-    items = []
-    for r in raw["items"]:
-        items.append(RecordItem(
-            id=r["id"],
-            created_at=r["created_at"],
-            plates=[PlateResult(**p) for p in r["plates"]],
-            used_sr=r["used_sr"],
-            image_url=f"/api/images/{r['image_path']}",
-        ))
+    items = [_record_to_item(r) for r in raw["items"]]
     return RecordsResponse(total=raw["total"], items=items)
 
 @app.get("/api/records/export")
@@ -160,13 +174,31 @@ def get_record_by_id(record_id: int):
     record = db.get_record(record_id)
     if not record:
         raise HTTPException(404, "记录不存在")
-    return RecordItem(
-        id=record["id"],
-        created_at=record["created_at"],
-        plates=[PlateResult(**p) for p in record["plates"]],
-        used_sr=record["used_sr"],
-        image_url=f"/api/images/{record['image_path']}",
-    )
+    return _record_to_item(record)
+
+
+@app.patch("/api/records/{record_id}/feedback", response_model=RecordItem)
+def patch_record_feedback(record_id: int, req: FeedbackPatchRequest):
+    record = db.get_record(record_id)
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    if not db.update_feedback(record_id, req.feedback):
+        raise HTTPException(404, "记录不存在")
+    record = db.get_record(record_id)
+    return _record_to_item(record)
+
+
+@app.delete("/api/records")
+def delete_all_records():
+    image_paths = db.delete_all_records()
+    deleted = 0
+    for image_path in image_paths:
+        img_file = os.path.join(config.images_dir, image_path)
+        if os.path.exists(img_file):
+            os.remove(img_file)
+            deleted += 1
+    return {"ok": True, "deleted": len(image_paths), "deleted_images": deleted}
+
 
 @app.delete("/api/records/{record_id}")
 def delete_record_by_id(record_id: int):

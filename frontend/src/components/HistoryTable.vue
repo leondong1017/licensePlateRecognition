@@ -1,24 +1,29 @@
 <template>
   <div>
     <div class="toolbar">
-      <t-input
-        v-model="filters.plate"
-        placeholder="搜索车牌号…"
-        style="width: 200px"
-        clearable
-        @input="onFilter"
-      />
-      <t-select
-        v-model="filters.type"
-        placeholder="全部类型"
-        style="width: 200px"
-        clearable
-        @change="onTypeChange"
-      >
-        <t-option value="blue" label="蓝牌" />
-        <t-option value="green_small" label="新能源" />
-        <t-option value="yellow" label="黄牌" />
-      </t-select>
+      <div class="toolbar-left">
+        <t-input
+          v-model="filters.plate"
+          placeholder="搜索车牌号…"
+          style="width: 200px"
+          clearable
+          @input="onFilter"
+        />
+        <t-select
+          v-model="filters.type"
+          placeholder="全部类型"
+          style="width: 200px"
+          clearable
+          @change="onTypeChange"
+        >
+          <t-option value="blue" label="蓝牌" />
+          <t-option value="green_small" label="新能源" />
+          <t-option value="yellow" label="黄牌" />
+        </t-select>
+      </div>
+      <t-button theme="danger" variant="outline" :disabled="records.length === 0" @click="onDeleteAll">
+        删除全部记录
+      </t-button>
     </div>
 
     <div v-if="loading" class="loading-hint">加载中…</div>
@@ -85,10 +90,10 @@
     </table>
 
     <div class="pagination">
-      <span class="pg-info">共 {{ total }} 条</span>
+      <span class="pg-info">共 {{ total }} 条，每页 {{ PAGE_SIZE }} 条</span>
       <button class="pg-btn" :disabled="page <= 1" @click="page--; load()">‹</button>
       <span class="pg-current">{{ page }}</span>
-      <button class="pg-btn" :disabled="page * 20 >= total" @click="page++; load()">›</button>
+      <button class="pg-btn" :disabled="page * PAGE_SIZE >= total" @click="page++; load()">›</button>
     </div>
 
     <!-- Detail Modal -->
@@ -101,14 +106,32 @@
           </div>
           <div class="modal-body">
             <div class="modal-image-wrap" v-if="detailRecord">
-              <img
-                :src="detailRecord.image_url"
-                class="modal-image"
-                ref="modalImg"
-                @load="drawModalBboxes"
-                draggable="false"
-              />
-              <canvas ref="modalCanvas" class="modal-canvas" />
+              <div class="modal-image-frame">
+                <img
+                  ref="modalImg"
+                  :src="detailRecord.image_url"
+                  class="modal-img-blur"
+                  alt=""
+                  draggable="false"
+                  @load="onModalImageLoad"
+                />
+                <div class="sharp-layer" aria-hidden="true">
+                  <div
+                    v-for="(clipStyle, i) in modalSharpStyles"
+                    :key="i"
+                    class="sharp-clip"
+                    :style="clipStyle.clip"
+                  >
+                    <img
+                      :src="detailRecord.image_url"
+                      class="sharp-img"
+                      alt=""
+                      :style="clipStyle.inner"
+                    />
+                  </div>
+                </div>
+                <canvas ref="modalCanvas" class="modal-canvas" />
+              </div>
             </div>
             <div class="modal-plates" v-if="detailRecord">
               <PlateCard
@@ -131,16 +154,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue'
-import { listRecords, deleteRecord } from '../api'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { listRecords, deleteRecord, deleteAllRecords } from '../api'
 import PlateVisual from './PlateVisual.vue'
 import PlateCard from './PlateCard.vue'
 import type { RecordItem } from '../types'
+import { usePlateFocusImage, getImageScaleParams } from '../composables/usePlateFocusImage'
 
 const records = ref<RecordItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
 const filters = ref({ plate: '', type: '' as string | undefined })
+const PAGE_SIZE = 8
 
 // Detail modal
 const detailVisible = ref(false)
@@ -148,11 +174,37 @@ const detailRecord = ref<RecordItem | null>(null)
 const modalImg = ref<HTMLImageElement | null>(null)
 const modalCanvas = ref<HTMLCanvasElement | null>(null)
 
+function drawModalBboxes() {
+  const canvas = modalCanvas.value
+  const img = modalImg.value
+  if (!canvas || !img || !detailRecord.value) return
+  canvas.width = img.clientWidth
+  canvas.height = img.clientHeight
+  const { scale, offsetX, offsetY } = getImageScaleParams(img)
+  const ctx = canvas.getContext('2d')!
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.strokeStyle = '#00e5a0'
+  ctx.lineWidth = 2
+  for (const plate of detailRecord.value.plates) {
+    const [x, y, w, h] = plate.bbox
+    ctx.strokeRect(offsetX + x * scale, offsetY + y * scale, w * scale, h * scale)
+  }
+}
+
+const { sharpClipStyles: modalSharpStyles, onImageLoad: onModalFocusLoad, bumpLayout: bumpModalLayout } =
+  usePlateFocusImage(modalImg, () => detailRecord.value?.plates ?? [], drawModalBboxes)
+
+function onModalImageLoad() {
+  onModalFocusLoad()
+  drawModalBboxes()
+}
+
 async function load() {
   loading.value = true
   try {
     const res = await listRecords({
       page: page.value,
+      limit: PAGE_SIZE,
       plate: filters.value.plate,
       type: filters.value.type ?? '',
     })
@@ -180,51 +232,69 @@ async function onDeleteRow(id: number) {
   }
 }
 
-function openDetail(record: RecordItem) {
-  detailRecord.value = record
-  detailVisible.value = true
-  // Draw bboxes after modal renders
-  nextTick(() => {
-    if (modalImg.value?.complete) drawModalBboxes()
+async function onDeleteAll() {
+  if (records.value.length === 0) return
+  let closed = false
+  let dlg: ReturnType<typeof DialogPlugin.confirm>
+  const closeDlg = () => {
+    if (closed) return
+    closed = true
+    dlg.destroy()
+  }
+  dlg = DialogPlugin.confirm({
+    header: '确认删除全部记录？',
+    body: '该操作会删除当前所有历史记录及关联图片，且不可恢复。',
+    theme: 'danger',
+    confirmBtn: '确认删除',
+    cancelBtn: '取消',
+    onConfirm: async () => {
+      try {
+        const res = await deleteAllRecords()
+        await load()
+        MessagePlugin.success(`已删除 ${res.deleted} 条记录`)
+      } catch {
+        MessagePlugin.error('删除失败，请重试')
+      } finally {
+        closeDlg()
+      }
+    },
+    onCancel: () => {
+      closeDlg()
+    },
+    onClose: () => {
+      closeDlg()
+    },
   })
 }
 
-function getScaleParams(img: HTMLImageElement) {
-  const scale = Math.min(img.clientWidth / img.naturalWidth, img.clientHeight / img.naturalHeight)
-  const renderedW = img.naturalWidth * scale
-  const renderedH = img.naturalHeight * scale
-  const offsetX = (img.clientWidth - renderedW) / 2
-  const offsetY = (img.clientHeight - renderedH) / 2
-  return { scale, offsetX, offsetY }
+function openDetail(record: RecordItem) {
+  detailRecord.value = record
+  detailVisible.value = true
+  nextTick(() => {
+    if (modalImg.value?.complete) {
+      onModalFocusLoad()
+      drawModalBboxes()
+    }
+  })
 }
 
-function drawModalBboxes() {
-  const canvas = modalCanvas.value
-  const img = modalImg.value
-  if (!canvas || !img || !detailRecord.value) return
-  canvas.width = img.clientWidth
-  canvas.height = img.clientHeight
-  const { scale, offsetX, offsetY } = getScaleParams(img)
-  const ctx = canvas.getContext('2d')!
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.strokeStyle = '#00e5a0'
-  ctx.lineWidth = 2
-  for (const plate of detailRecord.value.plates) {
-    const [x, y, w, h] = plate.bbox
-    ctx.strokeRect(offsetX + x * scale, offsetY + y * scale, w * scale, h * scale)
-  }
-}
-
-// Watch detailVisible to re-draw when modal reopens
 watch(detailVisible, (v) => {
-  if (v) nextTick(() => { if (modalImg.value?.complete) drawModalBboxes() })
+  if (v) {
+    nextTick(() => {
+      if (modalImg.value?.complete) {
+        bumpModalLayout()
+        drawModalBboxes()
+      }
+    })
+  }
 })
 
 onMounted(load)
 </script>
 
 <style scoped>
-.toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
+.toolbar { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 16px; align-items: center; }
+.toolbar-left { display: flex; gap: 10px; align-items: center; }
 .loading-hint { text-align: center; color: #999; padding: 24px; }
 .records-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .records-table thead th { text-align: left; padding: 9px 12px; font-size: 11px; font-weight: 600; color: #999; letter-spacing: .04em; border-bottom: 1px solid #e8e8e8; background: #fafafa; text-transform: uppercase; }
@@ -234,7 +304,7 @@ onMounted(load)
 .thumb { width: 54px; height: 34px; object-fit: cover; border-radius: 3px; background: #2b2b2b; display: block; }
 .badge-warn { background: #fff3e0; color: #e65c00; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
 .badge-light { background: #f0f0f0; color: #4a4a4a; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
-.conf-low { color: #e37318; font-weight: 500; }
+.conf-low { color: var(--td-warning-color, #e37318); font-weight: 700; }
 .action-cell { display: flex; gap: 8px; align-items: center; }
 .link-btn { color: #1a1a1a; background: none; border: 1px solid #d4d4d4; cursor: pointer; font-size: 12px; padding: 4px 10px; border-radius: 3px; }
 .link-btn:hover { background: #f5f5f5; }
@@ -254,7 +324,36 @@ onMounted(load)
 .modal-close:hover { color: #1a1a1a; }
 .modal-body { display: flex; flex-direction: column; gap: 16px; padding: 20px; overflow-y: auto; }
 .modal-image-wrap { position: relative; background: #111; border-radius: 6px; overflow: hidden; }
-.modal-image { display: block; width: 100%; max-height: 340px; object-fit: contain; }
+.modal-image-frame { position: relative; display: block; width: 100%; }
+.modal-img-blur {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  margin: 0 auto;
+  filter: blur(14px);
+  transform: scale(1.06);
+  vertical-align: top;
+}
+.sharp-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.sharp-clip {
+  position: absolute;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+.sharp-img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
 .modal-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 .modal-plates { display: flex; flex-direction: column; gap: 10px; }
 </style>

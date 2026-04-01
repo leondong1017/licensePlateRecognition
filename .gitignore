@@ -10,6 +10,7 @@ build/
 .pytest_cache/
 backend/lpr.db
 backend/images/
+backend/data/
 
 # Node
 frontend/node_modules/

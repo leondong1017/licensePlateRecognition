@@ -9,15 +9,15 @@
     @dragleave="isDragging = false"
     @drop.prevent="onDrop"
   >
-    <input ref="fileInput" type="file" accept=".jpg,.jpeg,.png,.bmp" style="display:none" @change="onFileChange" />
+    <input ref="fileInput" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" style="display:none" @change="onFileChange" />
     <div class="upload-icon">↑</div>
     <p class="upload-text">点击或拖拽图片 / 视频帧至此处</p>
-    <p class="upload-hint">支持 JPG、PNG、BMP，最大 <strong>20MB</strong></p>
+    <p class="upload-hint">支持 JPG、PNG、BMP、WebP（静态），最大 <strong>20MB</strong></p>
   </div>
 
   <!-- Preview state -->
   <div v-else class="preview-zone">
-    <input ref="fileInput" type="file" accept=".jpg,.jpeg,.png,.bmp" style="display:none" @change="onFileChange" />
+    <input ref="fileInput" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" style="display:none" @change="onFileChange" />
     <div class="preview-wrap">
       <img :src="previewUrl" class="preview-img" @click="lightboxOpen = true" title="点击查看大图" />
       <div class="preview-overlay" @click="lightboxOpen = true">
@@ -56,7 +56,7 @@ const previewUrl = ref('')
 const currentFile = ref<File | null>(null)
 const lightboxOpen = ref(false)
 
-const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp']
+const ALLOWED = ['image/jpeg', 'image/png', 'image/bmp', 'image/webp']
 
 const fileName = computed(() => currentFile.value?.name ?? '')
 const fileSize = computed(() => {
@@ -68,7 +68,7 @@ const fileSize = computed(() => {
 
 function validate(file: File): boolean {
   if (!ALLOWED.includes(file.type)) {
-    alert('仅支持 JPG/PNG/BMP 格式')
+    alert('仅支持 JPG/PNG/BMP/WebP（静态）格式')
     return false
   }
   if (file.size > 20 * 1024 * 1024) {
@@ -112,11 +112,17 @@ defineExpose({ removeFile })
 .upload-zone {
   border: 2px dashed #d4d4d4;
   border-radius: 6px;
-  padding: 48px 24px;
+  padding: 24px;
   text-align: center;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
   background: #fafafa;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 .upload-zone:hover, .upload-zone--dragover {
   border-color: #1a1a1a;
@@ -128,9 +134,27 @@ defineExpose({ removeFile })
 .upload-hint strong { color: #1a1a1a; font-weight: 500; }
 
 /* Preview state */
-.preview-zone { border: 1px solid #e8e8e8; border-radius: 6px; overflow: hidden; background: #fff; }
-.preview-wrap { position: relative; background: #f5f5f5; cursor: pointer; max-height: 280px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-.preview-img { max-width: 100%; max-height: 280px; object-fit: contain; display: block; }
+.preview-zone {
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.preview-wrap {
+  position: relative;
+  background: #f5f5f5;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+}
+.preview-img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .preview-overlay {
   position: absolute; inset: 0; background: rgba(0,0,0,0);
   display: flex; align-items: center; justify-content: center;
@@ -142,6 +166,9 @@ defineExpose({ removeFile })
 .preview-info {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; border-top: 1px solid #f0f0f0;
+  min-height: 48px;
+  height: 48px;
+  flex-shrink: 0;
 }
 .preview-name { font-size: 13px; color: #1a1a1a; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-size { font-size: 12px; color: #999; white-space: nowrap; }

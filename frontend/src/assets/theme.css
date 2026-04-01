@@ -6,4 +6,23 @@
   --td-brand-color-light: #f5f5f5;
   --td-brand-color-light-hover: #ebebeb;
   --td-brand-color-focus: rgba(26, 26, 26, 0.1);
+  /* 与历史记录列表置信度警示色对齐（TDesign Warning） */
+  --td-warning-color: #e37318;
+}
+
+/* 全局：去掉 Tabs 导航区域底部分割线（含 ::after 伪元素线，保留激活项指示条） */
+.t-tabs__nav-container {
+  border-bottom: 0 none !important;
+  box-shadow: none !important;
+}
+
+.t-tabs__nav-container.t-is-top::after,
+.t-tabs__nav-container.t-is-bottom::after {
+  display: none !important;
+  content: none !important;
+  height: 0 !important;
+}
+
+.t-tabs__nav-wrap {
+  border-bottom: 0 none !important;
 }

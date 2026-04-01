@@ -20,12 +20,15 @@ export interface RecognizeResponse {
   multi_vehicle: boolean
 }
 
+export type UserFeedback = 'accurate' | 'inaccurate'
+
 export interface RecordItem {
   id: number
   created_at: string
   plates: PlateResult[]
   used_sr: boolean
   image_url: string
+  user_feedback?: UserFeedback | null
 }
 
 export interface RecordsResponse {

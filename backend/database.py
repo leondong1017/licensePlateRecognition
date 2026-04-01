@@ -20,6 +20,13 @@ class Database:
                     used_sr    INTEGER DEFAULT 0
                 )
             """)
+        self._migrate()
+
+    def _migrate(self):
+        with self._conn() as conn:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(records)").fetchall()}
+            if "user_feedback" not in cols:
+                conn.execute("ALTER TABLE records ADD COLUMN user_feedback TEXT")
 
     def _conn(self):
         conn = sqlite3.connect(self.db_path)
@@ -79,6 +86,17 @@ class Database:
                                   p["type_label"], p["confidence"], bool(row["used_sr"])])
         return buf.getvalue()
 
+    def update_feedback(self, record_id: int, feedback: Optional[str]) -> bool:
+        """feedback: 'accurate' | 'inaccurate' | None to clear."""
+        if feedback is not None and feedback not in ("accurate", "inaccurate"):
+            return False
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE records SET user_feedback=? WHERE id=?",
+                (feedback, record_id),
+            )
+            return cur.rowcount > 0
+
     def delete_record(self, record_id: int):
         """Delete a record and return its image_path, or None if not found."""
         with self._conn() as conn:
@@ -88,8 +106,17 @@ class Database:
             conn.execute("DELETE FROM records WHERE id=?", (record_id,))
             return row["image_path"]
 
+    def delete_all_records(self) -> List[str]:
+        """Delete all records and return removed image paths."""
+        with self._conn() as conn:
+            rows = conn.execute("SELECT image_path FROM records").fetchall()
+            conn.execute("DELETE FROM records")
+        return [r["image_path"] for r in rows]
+
     def _row_to_dict(self, row) -> Dict[str, Any]:
         d = dict(row)
         d["plates"] = json.loads(d["plates"])
         d["used_sr"] = bool(d["used_sr"])
+        if "user_feedback" not in d or d["user_feedback"] is None:
+            d["user_feedback"] = None
         return d

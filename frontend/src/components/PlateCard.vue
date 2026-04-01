@@ -17,28 +17,19 @@
   <!-- Full variant for recognition result -->
   <div v-else class="plate-card">
     <div class="plate-display-row">
-      <PlateVisual
-        :province="plate.province"
-        :city-code="plate.city_code"
-        :number="plate.number"
-        :type="plate.type"
-        size="lg"
-      />
-      <span class="type-label">{{ plate.type_label }}</span>
+      <div class="plate-main">
+        <PlateVisual
+          :province="plate.province"
+          :city-code="plate.city_code"
+          :number="plate.number"
+          :type="plate.type"
+          size="lg"
+        />
+      </div>
+      <div class="confidence-flow" :class="{ 'confidence-flow--warn': plate.confidence < 0.9 }">
+        <span class="confidence-value confidence-value--after">{{ toPercent(plate.confidence) }}</span>
+      </div>
     </div>
-    <div class="confidence-bar">
-      <div
-        class="confidence-fill"
-        :class="{ warn: plate.confidence < 0.95 }"
-        :style="{ width: (plate.confidence * 100) + '%' }"
-      />
-    </div>
-    <p class="confidence-label">
-      置信度 {{ (plate.confidence * 100).toFixed(0) }}%
-      <span v-if="plate.confidence_before_sr != null">
-        （超分前 {{ (plate.confidence_before_sr * 100).toFixed(0) }}%）
-      </span>
-    </p>
     <div v-if="plate.confidence_before_sr != null" class="sr-notice">
       ⚠ 图片较模糊，已自动启用超分增强
     </div>
@@ -60,19 +51,65 @@ defineProps<{
   durationMs?: number
   timestamp?: string
 }>()
+
+function toPercent(value: number | null | undefined): string {
+  if (value == null) return ''
+  return `${(value * 100).toFixed(0)}%`
+}
 </script>
 
 <style scoped>
 /* Full card */
-.plate-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 6px; padding: 18px; }
-.plate-display-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.type-label { font-size: 11px; color: #999; }
-.confidence-bar { height: 3px; background: #f0f0f0; border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
-.confidence-fill { height: 100%; background: #1a1a1a; border-radius: 2px; transition: width .3s; }
-.confidence-fill.warn { background: #e65c00; }
-.confidence-label { font-size: 11px; color: #999; }
-.sr-notice { font-size: 12px; color: #e65c00; margin-top: 8px; padding: 6px 10px; background: #fff3e0; border-radius: 4px; }
-.info-row { display: flex; justify-content: space-between; font-size: 11px; color: #bbb; padding-top: 10px; border-top: 1px solid #f0f0f0; margin-top: 8px; }
+.plate-card {
+  background: #fff;
+  border: 1px solid var(--td-component-stroke, #e8e8e8);
+  border-radius: var(--td-radius-medium, 6px);
+  padding: 18px;
+}
+.plate-display-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.plate-main {
+  min-width: 0;
+  flex: 1;
+}
+.confidence-flow {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.confidence-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.confidence-value--after {
+  color: var(--td-brand-color, #0052d9);
+}
+.confidence-flow--warn .confidence-value--after {
+  color: var(--td-warning-color, #e37318);
+}
+.sr-notice {
+  font-size: 12px;
+  color: var(--td-warning-color, #e65c00);
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: var(--td-warning-color-1, #fff3e0);
+  border-radius: var(--td-radius-small, 4px);
+}
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--td-text-color-placeholder, #bbb);
+  margin-top: 12px;
+  padding-top: 0;
+}
 
 /* Compact card */
 .plate-card--compact {
@@ -91,7 +128,13 @@ defineProps<{
   align-items: flex-end;
   gap: 3px;
 }
-.compact-conf { font-size: 13px; font-weight: 500; color: #1a1a1a; }
-.compact-time { font-size: 11px; color: #999; }
+.compact-conf {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+.compact-time {
+  font-size: 11px;
+  color: #999;
+}
 </style>
-

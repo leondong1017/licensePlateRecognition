@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { RecognizeResponse, RecordsResponse, RecordItem } from '../types'
+import type { RecognizeResponse, RecordsResponse, RecordItem, UserFeedback } from '../types'
 
 export async function recognizePlate(file: File): Promise<RecognizeResponse> {
   const form = new FormData()
@@ -44,4 +44,17 @@ export async function getRecord(id: number): Promise<RecordItem> {
 
 export async function deleteRecord(id: number): Promise<void> {
   await axios.delete(`/api/records/${id}`)
+}
+
+export async function deleteAllRecords(): Promise<{ ok: boolean; deleted: number; deleted_images: number }> {
+  const { data } = await axios.delete<{ ok: boolean; deleted: number; deleted_images: number }>(`/api/records`)
+  return data
+}
+
+export async function patchRecordFeedback(
+  id: number,
+  feedback: UserFeedback | null
+): Promise<RecordItem> {
+  const { data } = await axios.patch<RecordItem>(`/api/records/${id}/feedback`, { feedback })
+  return data
 }

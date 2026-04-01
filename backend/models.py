@@ -1,6 +1,6 @@
 # backend/models.py
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field
+from typing import Optional, List, Literal
 from enum import Enum
 
 class PlateType(str, Enum):
@@ -44,6 +44,14 @@ class RecordItem(BaseModel):
     plates: List[PlateResult]
     used_sr: bool
     image_url: str
+    user_feedback: Optional[Literal["accurate", "inaccurate"]] = None
+
+
+class FeedbackPatchRequest(BaseModel):
+    feedback: Optional[Literal["accurate", "inaccurate"]] = Field(
+        default=None,
+        description="用户反馈；传 null 表示清除",
+    )
 
 class RecordsResponse(BaseModel):
     total: int

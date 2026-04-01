@@ -1,128 +1,219 @@
 <template>
   <div class="page-card">
-    <div class="state-tabs">
-      <button class="state-tab" :class="{ active: activeTab === 'upload' }" @click="activeTab = 'upload'">上传图片</button>
-      <button class="state-tab" :class="{ active: activeTab === 'result', disabled: !hasResult }" @click="hasResult && (activeTab = 'result')">识别结果</button>
-    </div>
+    <div class="workbench-layout" :class="{ 'workbench-layout--result': hasResult }">
+      <section class="pane left-pane">
+        <div class="pane-card">
+          <div class="section-heading">上传图片</div>
 
-    <!-- Upload state -->
-    <div v-if="activeTab === 'upload'" class="tab-content">
-      <UploadZone ref="uploadZoneRef" @file-selected="onFileSelected" @file-removed="onFileRemoved" />
-      <div class="action-row">
-        <button class="btn btn-outline" @click="reset">重置</button>
-        <button class="btn btn-primary" :disabled="!selectedFile || loading" @click="submit">
-          {{ loading ? '检测中…' : '开始识别' }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Result state -->
-    <div v-if="activeTab === 'result'" class="tab-content result-layout">
-      <!-- Left: image with bbox overlays -->
-      <div class="result-image-wrap">
-        <img
-          :src="previewUrl"
-          class="result-image"
-          ref="resultImg"
-          @load="drawBboxes"
-          draggable="false"
-        />
-        <canvas
-          ref="bboxCanvas"
-          class="bbox-canvas"
-          @click="onCanvasClick"
-        />
-        <span class="plate-count-tag" v-if="detectedPlates.length > 0">
-          {{ confirmedPlate ? '✓ 已确认' : `检测到 ${detectedPlates.length} 张车牌，请点选目标` }}
-        </span>
-        <span class="plate-count-tag warn" v-else>未检测到车牌</span>
-      </div>
-
-      <!-- Right: plate list + confirm -->
-      <div class="result-panel">
-        <p class="section-label">{{ confirmedPlate ? '识别结果' : '请选择目标车牌' }}</p>
-
-        <!-- Before confirm: show all detected plates for selection -->
-        <template v-if="!confirmedPlate">
-          <div class="result-panel-top">
-            <div
-              v-for="(plate, i) in detectedPlates"
-              :key="i"
-              class="plate-select-card"
-              :class="{ selected: selectedPlateIndex === i }"
-              @click="selectPlate(i)"
-            >
-              <span class="plate-select-num">{{ i + 1 }}</span>
-              <div class="plate-select-info">
-                <PlateVisual
-                  :province="plate.province"
-                  :city-code="plate.city_code"
-                  :number="validatePlateNumber(plate.number, plate.type)"
-                  :type="plate.type"
-                  size="md"
-                />
-                <span
-                  v-if="hasUncertainChars(validatePlateNumber(plate.number, plate.type))"
-                  class="plate-uncertain-hint"
-                >含不确定字符，建议超分识别</span>
+          <div v-if="hasResult" class="result-image-wrap">
+          <div v-if="previewUrl" class="result-image-frame" :class="{ 'is-decoding': confirmLoading }">
+            <img
+              ref="resultImg"
+              :src="previewUrl"
+              class="result-image result-image--blur"
+              alt=""
+              @load="onResultImgLoad"
+            />
+            <div v-if="confirmLoading" class="decode-mask">
+              <span class="decode-text">超分解码中…</span>
+            </div>
+            <div class="sharp-layer" aria-hidden="true">
+              <div
+                v-for="(clipStyle, i) in sharpClipStyles"
+                :key="i"
+                class="sharp-clip"
+                :style="clipStyle.clip"
+              >
+                <img :src="previewUrl" class="sharp-img" alt="" :style="clipStyle.inner" />
               </div>
-              <span class="plate-select-conf" :class="{ 'conf-low': plate.confidence < 0.8 }">
-                {{ (plate.confidence * 100).toFixed(0) }}%
-              </span>
             </div>
-            <div v-if="detectedPlates.length === 0" class="no-plate-notice">
-              未检测到车牌，请尝试更换图片
-            </div>
+            <canvas ref="bboxCanvas" class="bbox-canvas" @click="onCanvasClick" />
+            <span v-if="platesForView.length > 0" class="plate-count-tag">
+              {{ confirmedPlate ? '✓ 已确认' : `检测到 ${detectedPlates.length} 张车牌，请点选目标` }}
+            </span>
+            <span v-else class="plate-count-tag warn">未检测到车牌</span>
           </div>
-          <!-- 垂直按钮组，全宽，底部对齐 -->
-          <div class="action-col" v-if="detectedPlates.length > 0">
-            <button class="btn-full btn-full--outline" @click="reset">重新上传</button>
-            <button
-              class="btn-full btn-full--primary"
-              :disabled="selectedPlateIndex === null || confirmLoading"
-              @click="confirmRecognize"
-            >{{ confirmLoading ? '超分识别中…' : '确认识别' }}</button>
           </div>
-        </template>
+          <div v-else class="upload-wrap">
+            <UploadZone ref="uploadZoneRef" @file-selected="onFileSelected" @file-removed="onFileRemoved" />
+          </div>
 
-        <!-- After confirm: show final result -->
-        <template v-if="confirmedPlate">
-          <PlateCard
-            :plate="confirmedPlate"
-            :primary="true"
-            :duration-ms="confirmDurationMs"
-            :timestamp="savedAt"
-          />
-          <div class="action-row">
-            <button class="btn btn-outline" @click="reset">重新识别</button>
-            <button class="btn btn-primary" @click="onSave">保存记录</button>
+        </div>
+      </section>
+
+      <section class="pane right-pane">
+        <div class="pane-card">
+          <div class="section-heading">
+            {{ hasResult ? (confirmedPlate ? '识别结果' : '目标车牌') : '识别结果' }}
           </div>
-        </template>
+
+          <div class="right-content">
+          <template v-if="!hasResult">
+            <div class="empty-result">上传图片并点击“开始识别”后，结果将显示在这里</div>
+            <t-space direction="vertical" size="small" class="result-actions-td">
+              <t-button block theme="default" variant="outline" @click="reset">重置</t-button>
+              <t-button
+                block
+                theme="primary"
+                :loading="loading"
+                :disabled="!selectedFile"
+                @click="submit"
+              >
+                {{ loading ? '检测中…' : '开始识别' }}
+              </t-button>
+            </t-space>
+          </template>
+
+          <template v-else-if="!confirmedPlate">
+            <div class="plate-list">
+              <div
+                v-for="(plate, i) in detectedPlates"
+                :key="i"
+                class="plate-select-card"
+                :class="{ selected: selectedPlateIndex === i }"
+                @click="selectPlate(i)"
+              >
+                <span class="plate-select-num">{{ i + 1 }}</span>
+                <div class="plate-select-info">
+                  <PlateVisual
+                    :province="plate.province"
+                    :city-code="plate.city_code"
+                    :number="validatePlateNumber(plate.number, plate.type)"
+                    :type="plate.type"
+                    size="md"
+                  />
+                  <span
+                    v-if="hasUncertainChars(validatePlateNumber(plate.number, plate.type))"
+                    class="plate-uncertain-hint"
+                  >含不确定字符，建议超分识别</span>
+                </div>
+                <span
+                  class="plate-select-conf"
+                  :class="{ 'plate-select-conf--warn': plate.confidence < CONFIDENCE_THRESHOLD }"
+                >
+                  {{ (plate.confidence * 100).toFixed(0) }}%
+                </span>
+              </div>
+              <div v-if="detectedPlates.length === 0" class="no-plate-notice">
+                未检测到车牌，请尝试更换图片
+              </div>
+            </div>
+
+            <div v-if="!feedbackSubmitted && detectedPlates.length > 0" class="feedback-row">
+              <span class="section-heading section-heading--inline">结果反馈</span>
+              <t-space :size="8">
+                <t-button
+                  shape="square"
+                  size="large"
+                  :variant="accuracyFeedback === 'accurate' ? 'base' : 'outline'"
+                  theme="primary"
+                  :disabled="feedbackDisabled"
+                  aria-label="识别准确"
+                  @click="submitThumbFeedback('accurate')"
+                >
+                  <template #icon><ThumbUpIcon /></template>
+                </t-button>
+                <t-button
+                  shape="square"
+                  size="large"
+                  :variant="accuracyFeedback === 'inaccurate' ? 'base' : 'outline'"
+                  theme="danger"
+                  :disabled="feedbackDisabled"
+                  aria-label="识别有误"
+                  @click="submitThumbFeedback('inaccurate')"
+                >
+                  <template #icon><ThumbDownIcon /></template>
+                </t-button>
+              </t-space>
+            </div>
+            <p v-if="feedbackDisabled" class="feedback-warn-hint">请先在左侧图中点选目标车牌</p>
+
+            <t-space
+              direction="vertical"
+              size="small"
+              class="result-actions-td"
+            >
+              <t-button block theme="default" variant="outline" @click="reset">重新上传</t-button>
+              <t-button
+                v-if="detectedPlates.length > 0"
+                block
+                theme="primary"
+                :loading="confirmLoading"
+                :disabled="selectedPlateIndex === null"
+                @click="runSuperResolution"
+              >
+                {{ confirmLoading ? '超分识别中…' : '超分识别' }}
+              </t-button>
+            </t-space>
+          </template>
+
+          <template v-else>
+            <PlateCard
+              :plate="confirmedPlate"
+              :primary="true"
+              :duration-ms="confirmDurationMs"
+              :timestamp="savedAt"
+            />
+
+            <div v-if="!feedbackSubmitted" class="feedback-row">
+              <span class="section-heading section-heading--inline">结果反馈</span>
+              <t-space :size="8">
+                <t-button
+                  shape="square"
+                  size="large"
+                  :variant="accuracyFeedback === 'accurate' ? 'base' : 'outline'"
+                  theme="primary"
+                  aria-label="识别准确"
+                  @click="submitThumbFeedback('accurate')"
+                >
+                  <template #icon><ThumbUpIcon /></template>
+                </t-button>
+                <t-button
+                  shape="square"
+                  size="large"
+                  :variant="accuracyFeedback === 'inaccurate' ? 'base' : 'outline'"
+                  theme="danger"
+                  aria-label="识别有误"
+                  @click="submitThumbFeedback('inaccurate')"
+                >
+                  <template #icon><ThumbDownIcon /></template>
+                </t-button>
+              </t-space>
+            </div>
+
+            <t-button
+              block
+              theme="default"
+              variant="outline"
+              class="result-actions-td"
+              @click="reset"
+            >
+              重新识别
+            </t-button>
+          </template>
+          </div>
       </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { ThumbUpIcon, ThumbDownIcon } from 'tdesign-icons-vue-next'
 import UploadZone from '../components/UploadZone.vue'
 import PlateCard from '../components/PlateCard.vue'
 import PlateVisual from '../components/PlateVisual.vue'
-import { recognizePlate, confirmPlate } from '../api'
+import { recognizePlate, confirmPlate, patchRecordFeedback } from '../api'
 import type { PlateResult } from '../types'
+import { usePlateFocusImage, getImageScaleParams } from '../composables/usePlateFocusImage'
 
-// ── 车牌格式校验 ────────────────────────────────────────────────
-// 国标字符集（排除 I、O）
+const CONFIDENCE_THRESHOLD = 0.9
 const VALID_CHARS = new Set('ABCDEFGHJKLMNPQRSTUVWXYZ0123456789')
-
-// 各牌型期望的 number 字段位数（即省/市码之后的字符数）
 const EXPECTED_NUMBER_LEN: Record<string, number> = {
-  blue: 5,        // 蓝牌  7 位 = 省(1)+市(1)+5
-  yellow: 5,      // 黄牌
-  white: 5,       // 警/军
-  black: 5,       // 使馆
-  green_small: 6, // 新能源小型 8 位，末位 D/F
-  unknown: 5,
+  blue: 5, yellow: 5, white: 5, black: 5, green_small: 6, unknown: 5,
 }
 
 function validatePlateNumber(number: string, type: string): string {
@@ -131,7 +222,6 @@ function validatePlateNumber(number: string, type: string): string {
   const truncated = padded.slice(0, expected)
   return truncated.split('').map((ch, idx) => {
     if (ch === '?') return '?'
-    // 新能源末位只允许 D 或 F
     if (type === 'green_small' && idx === expected - 1 && ch !== 'D' && ch !== 'F') return '?'
     if (!VALID_CHARS.has(ch.toUpperCase())) return '?'
     return ch
@@ -141,9 +231,7 @@ function validatePlateNumber(number: string, type: string): string {
 function hasUncertainChars(validated: string): boolean {
   return validated.includes('?')
 }
-// ────────────────────────────────────────────────────────────────
 
-const activeTab = ref<'upload' | 'result'>('upload')
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
 const loading = ref(false)
@@ -152,17 +240,103 @@ const hasResult = ref(false)
 const savedAt = ref('')
 const confirmDurationMs = ref(0)
 
-// Detection phase
 const detectedPlates = ref<PlateResult[]>([])
 const selectedPlateIndex = ref<number | null>(null)
 const currentRecordId = ref<number | null>(null)
-
-// Confirm phase
 const confirmedPlate = ref<PlateResult | null>(null)
 
-const uploadZoneRef = ref<any>(null)
+const accuracyFeedback = ref<'accurate' | 'inaccurate' | undefined>(undefined)
+const lastSyncedFeedback = ref<'accurate' | 'inaccurate' | undefined>(undefined)
+const feedbackSubmitted = ref(false)
+
+const feedbackDisabled = computed(
+  () => detectedPlates.value.length > 1 && selectedPlateIndex.value === null
+)
+
+const platesForView = computed(() => confirmedPlate.value ? [confirmedPlate.value] : detectedPlates.value)
+
+const uploadZoneRef = ref<{ removeFile: () => void } | null>(null)
 const resultImg = ref<HTMLImageElement | null>(null)
 const bboxCanvas = ref<HTMLCanvasElement | null>(null)
+
+function drawBboxes() {
+  const canvas = bboxCanvas.value
+  const img = resultImg.value
+  if (!canvas || !img) return
+  canvas.width = img.clientWidth
+  canvas.height = img.clientHeight
+  const { scale, offsetX, offsetY } = getImageScaleParams(img)
+  const ctx = canvas.getContext('2d')!
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  platesForView.value.forEach((plate, i) => {
+    const [x, y, w, h] = plate.bbox
+    const cx = offsetX + x * scale
+    const cy = offsetY + y * scale
+    const cw = w * scale
+    const ch = h * scale
+    const isSelected = confirmedPlate.value ? true : selectedPlateIndex.value === i
+
+    ctx.strokeStyle = isSelected ? '#00e5a0' : 'rgba(255,255,255,0.6)'
+    ctx.lineWidth = isSelected ? 3 : 1.5
+    ctx.strokeRect(cx, cy, cw, ch)
+
+    if (isSelected) {
+      ctx.fillStyle = 'rgba(0,229,160,0.15)'
+      ctx.fillRect(cx, cy, cw, ch)
+    }
+
+    ctx.fillStyle = isSelected ? '#00e5a0' : 'rgba(255,255,255,0.8)'
+    ctx.font = 'bold 13px sans-serif'
+    ctx.fillText(`${i + 1}`, cx + 4, cy + 15)
+  })
+}
+
+const { sharpClipStyles, bumpLayout, onImageLoad: onFocusImageLoad } = usePlateFocusImage(
+  resultImg,
+  () => platesForView.value,
+  drawBboxes
+)
+
+watch(selectedPlateIndex, () => {
+  accuracyFeedback.value = undefined
+  lastSyncedFeedback.value = undefined
+})
+
+onBeforeRouteLeave((to) => {
+  if (to.path !== '/history') return true
+  const dirty = hasResult.value || !!selectedFile.value || !!previewUrl.value
+  if (!dirty) return true
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const done = (v: boolean) => {
+      if (settled) return
+      settled = true
+      resolve(v)
+    }
+    let dlgClosed = false
+    const closeDlg = () => {
+      if (dlgClosed) return
+      dlgClosed = true
+      dlg.destroy()
+    }
+    let dlg: ReturnType<typeof DialogPlugin.confirm>
+    dlg = DialogPlugin.confirm({
+      header: '确认离开当前页？',
+      body: '离开将中断当前识别流程，未保存的界面状态可能丢失。是否仍要离开？',
+      theme: 'warning',
+      confirmBtn: '仍要离开',
+      cancelBtn: '取消',
+      closeOnOverlayClick: true,
+      closeOnEscKeydown: true,
+      closeBtn: true,
+      onConfirm: () => { done(true); closeDlg() },
+      onCancel: () => { done(false); closeDlg() },
+      onClose: () => { done(false); closeDlg() },
+    })
+  })
+})
 
 function onFileSelected(file: File) {
   selectedFile.value = file
@@ -174,73 +348,27 @@ function onFileRemoved() {
   previewUrl.value = ''
 }
 
-// Compute letterbox-aware scaling params
-function getScaleParams() {
-  const img = resultImg.value
-  if (!img) return null
-  const scale = Math.min(img.clientWidth / img.naturalWidth, img.clientHeight / img.naturalHeight)
-  const renderedW = img.naturalWidth * scale
-  const renderedH = img.naturalHeight * scale
-  const offsetX = (img.clientWidth - renderedW) / 2
-  const offsetY = (img.clientHeight - renderedH) / 2
-  return { scale, renderedW, renderedH, offsetX, offsetY }
-}
-
-function drawBboxes() {
-  const canvas = bboxCanvas.value
-  const img = resultImg.value
-  if (!canvas || !img) return
-  canvas.width = img.clientWidth
-  canvas.height = img.clientHeight
-  const sp = getScaleParams()
-  if (!sp) return
-  const { scale, offsetX, offsetY } = sp
-  const ctx = canvas.getContext('2d')!
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-  detectedPlates.value.forEach((plate, i) => {
-    const [x, y, w, h] = plate.bbox
-    const cx = offsetX + x * scale
-    const cy = offsetY + y * scale
-    const cw = w * scale
-    const ch = h * scale
-    const isSelected = selectedPlateIndex.value === i
-
-    ctx.strokeStyle = isSelected ? '#00e5a0' : 'rgba(255,255,255,0.6)'
-    ctx.lineWidth = isSelected ? 3 : 1.5
-    ctx.strokeRect(cx, cy, cw, ch)
-
-    if (isSelected) {
-      ctx.fillStyle = 'rgba(0,229,160,0.15)'
-      ctx.fillRect(cx, cy, cw, ch)
-    }
-
-    // Index label
-    ctx.fillStyle = isSelected ? '#00e5a0' : 'rgba(255,255,255,0.8)'
-    ctx.font = 'bold 13px sans-serif'
-    ctx.fillText(`${i + 1}`, cx + 4, cy + 15)
-  })
+function onResultImgLoad() {
+  onFocusImageLoad()
+  drawBboxes()
 }
 
 function selectPlate(index: number) {
+  if (confirmedPlate.value) return
   selectedPlateIndex.value = index
   drawBboxes()
 }
 
 function onCanvasClick(e: MouseEvent) {
+  if (confirmedPlate.value) return
   const canvas = bboxCanvas.value
-  const sp = getScaleParams()
-  if (!canvas || !sp) return
+  const img = resultImg.value
+  if (!canvas || !img) return
+  const { scale, offsetX, offsetY } = getImageScaleParams(img)
   const rect = canvas.getBoundingClientRect()
-  const clickX = e.clientX - rect.left
-  const clickY = e.clientY - rect.top
-  const { scale, offsetX, offsetY } = sp
+  const imgX = (e.clientX - rect.left - offsetX) / scale
+  const imgY = (e.clientY - rect.top - offsetY) / scale
 
-  // Convert click to image coords
-  const imgX = (clickX - offsetX) / scale
-  const imgY = (clickY - offsetY) / scale
-
-  // Find which bbox was clicked
   for (let i = 0; i < detectedPlates.value.length; i++) {
     const [x, y, w, h] = detectedPlates.value[i].bbox
     if (imgX >= x && imgX <= x + w && imgY >= y && imgY <= y + h) {
@@ -257,36 +385,58 @@ async function submit() {
   selectedPlateIndex.value = null
   confirmedPlate.value = null
   currentRecordId.value = null
+  accuracyFeedback.value = undefined
+  lastSyncedFeedback.value = undefined
+  feedbackSubmitted.value = false
   try {
     const res = await recognizePlate(selectedFile.value)
     detectedPlates.value = res.plates
     currentRecordId.value = res.record_id
     hasResult.value = true
-    // Auto-select if only one plate
-    if (res.plates.length === 1) {
-      selectedPlateIndex.value = 0
-    }
-    activeTab.value = 'result'
+    if (res.plates.length === 1) selectedPlateIndex.value = 0
   } catch (e: any) {
     const detail = e?.response?.data?.detail
     const status = e?.response?.status
     let msg = '识别失败，请重试'
-    if (status === 503) {
-      msg = `识别引擎未就绪\n\n${detail ?? '后端服务异常'}\n\n解决方法：重启后端服务（uvicorn main:app --reload）`
-    } else if (status === 400) {
-      msg = detail ?? '图片格式不支持或文件过大'
-    } else if (status === 500) {
-      msg = detail ?? '服务器内部错误，请检查后端日志'
-    } else if (!status) {
-      msg = '无法连接后端服务，请确认后端已启动（端口 8000）'
-    }
-    alert(msg)
+    if (status === 503) msg = `识别引擎未就绪\n\n${detail ?? '后端服务异常'}\n\n解决方法：重启后端服务（uvicorn main:app --reload）`
+    else if (status === 400) msg = detail ?? '图片格式不支持或文件过大'
+    else if (status === 500) msg = detail ?? '服务器内部错误，请检查后端日志'
+    else if (!status) msg = '无法连接后端服务，请确认后端已启动（端口 8000）'
+    MessagePlugin.error(typeof detail === 'string' ? detail : msg)
   } finally {
     loading.value = false
   }
 }
 
-async function confirmRecognize() {
+function canSubmitFeedback(): boolean {
+  if (confirmedPlate.value) return true
+  if (detectedPlates.value.length === 0) return false
+  if (detectedPlates.value.length > 1 && selectedPlateIndex.value === null) return false
+  return true
+}
+
+async function submitThumbFeedback(value: 'accurate' | 'inaccurate') {
+  if (!currentRecordId.value) return
+  if (!canSubmitFeedback()) {
+    MessagePlugin.warning('请先在图中点选目标车牌')
+    return
+  }
+  const rollback = accuracyFeedback.value
+  const rollbackSynced = lastSyncedFeedback.value
+  accuracyFeedback.value = value
+  try {
+    await patchRecordFeedback(currentRecordId.value, value)
+    lastSyncedFeedback.value = value
+    feedbackSubmitted.value = true
+    MessagePlugin.success('感谢反馈')
+  } catch {
+    accuracyFeedback.value = rollback
+    lastSyncedFeedback.value = rollbackSynced
+    MessagePlugin.error('反馈提交失败，请稍后重试')
+  }
+}
+
+async function runSuperResolution() {
   if (selectedPlateIndex.value === null || currentRecordId.value === null) return
   confirmLoading.value = true
   const t0 = Date.now()
@@ -295,10 +445,14 @@ async function confirmRecognize() {
     confirmedPlate.value = res.plates[0]
     confirmDurationMs.value = Date.now() - t0
     savedAt.value = new Date().toLocaleString('zh-CN')
+    accuracyFeedback.value = undefined
+    lastSyncedFeedback.value = undefined
+    feedbackSubmitted.value = false
+    bumpLayout()
     drawBboxes()
   } catch (e: any) {
     const detail = e?.response?.data?.detail
-    alert(detail ?? '超分识别失败，请重试')
+    MessagePlugin.error(detail ?? '超分识别失败，请重试')
   } finally {
     confirmLoading.value = false
   }
@@ -313,54 +467,204 @@ function reset() {
   confirmedPlate.value = null
   currentRecordId.value = null
   hasResult.value = false
-  activeTab.value = 'upload'
-}
-
-function onSave() {
-  alert('记录已保存')
+  accuracyFeedback.value = undefined
+  lastSyncedFeedback.value = undefined
+  feedbackSubmitted.value = false
 }
 </script>
 
 <style scoped>
-.page-card { background: #fff; border-radius: 8px; border: 1px solid #e8e8e8; padding: 24px; }
-.state-tabs { display: flex; border-bottom: 1px solid #e8e8e8; margin-bottom: 24px; }
-.state-tab { padding: 10px 20px; font-size: 13px; cursor: pointer; color: #999; border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; }
-.state-tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 500; }
-.state-tab.disabled { cursor: not-allowed; opacity: 0.5; }
-.tab-content { padding-top: 4px; }
-.action-row { margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px; }
-.btn { display: inline-flex; align-items: center; justify-content: center; width: 140px; padding: 9px 0; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: #1a1a1a; color: #fff; }
-.btn-primary:not(:disabled):hover { background: #333; }
-.btn-outline { background: #fff; color: #1a1a1a; border: 1px solid #d4d4d4; }
-.btn-outline:hover { border-color: #1a1a1a; }
-.result-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: stretch; }
-.result-image-wrap { position: relative; border-radius: 6px; overflow: hidden; background: #111; align-self: start; }
-.result-image { display: block; width: 100%; max-height: 400px; object-fit: contain; }
-.bbox-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
-.plate-count-tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,.65); color: #fff; font-size: 12px; padding: 3px 10px; border-radius: 4px; }
-.plate-count-tag.warn { color: #ffb84d; }
-.result-panel { display: flex; flex-direction: column; gap: 10px; justify-content: space-between; }
-.result-panel-top { display: flex; flex-direction: column; gap: 10px; }
-.section-label { font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: .08em; }
-.plate-select-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #e8e8e8; border-radius: 6px; cursor: pointer; transition: all .15s; }
-.plate-select-card:hover { border-color: #1a1a1a; background: #fafafa; }
-.plate-select-card.selected { border-color: #1a1a1a; border-width: 2px; background: #f5f5f5; }
-.plate-select-num { font-size: 13px; font-weight: 700; color: #999; width: 18px; text-align: center; flex-shrink: 0; }
-.plate-select-card.selected .plate-select-num { color: #1a1a1a; }
-.plate-select-info { display: flex; flex-direction: column; gap: 4px; flex: 1; align-items: flex-start; }
-.plate-select-conf { font-size: 12px; color: #999; flex-shrink: 0; }
-.plate-select-conf.conf-low { color: #e65c00; font-weight: 500; }
-.plate-uncertain-hint { font-size: 11px; color: #e65c00; }
-.no-plate-notice { font-size: 13px; color: #e65c00; padding: 12px; background: #fff3e0; border-radius: 4px; }
+.page-card {
+  padding: 0;
+}
 
-/* Vertical full-width button group */
-.action-col { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.btn-full { width: 100%; padding: 10px 0; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; text-align: center; }
-.btn-full:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-full--outline { background: #fff; color: #1a1a1a; border: 1px solid #d4d4d4; }
-.btn-full--outline:hover { border-color: #1a1a1a; }
-.btn-full--primary { background: #1a1a1a; color: #fff; }
-.btn-full--primary:not(:disabled):hover { background: #333; }
+.workbench-layout {
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 20px;
+  --panel-media-height: clamp(340px, 46vh, 460px);
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pane-card {
+  background: #fff;
+  border: 1px solid var(--td-component-border, #e8e8e8);
+  border-radius: var(--td-radius-medium, 6px);
+  padding: var(--space-md);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.section-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--td-text-color-secondary, rgba(0, 0, 0, 0.6));
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  margin: 0 0 var(--space-xs);
+}
+
+.section-heading--inline {
+  margin: 0;
+}
+
+.upload-wrap {
+  min-height: var(--panel-media-height);
+  height: var(--panel-media-height);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-wrap :deep(.upload-zone),
+.upload-wrap :deep(.preview-zone) {
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.result-image-wrap {
+  height: var(--panel-media-height);
+  border-radius: var(--td-radius-medium, 6px);
+  overflow: hidden;
+  background: #111;
+}
+
+.result-image-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.result-image--blur {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  margin: 0 auto;
+  filter: blur(14px);
+  transform: scale(1.06);
+  vertical-align: top;
+}
+
+.result-image-frame.is-decoding .result-image--blur {
+  animation: decodingBlurPulse 1.4s ease-in-out infinite;
+}
+
+.sharp-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.sharp-clip { position: absolute; overflow: hidden; border-radius: 4px; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4); }
+.sharp-img { position: absolute; max-width: none; pointer-events: none; }
+.bbox-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
+
+.decode-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(1px);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.decode-text {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.62);
+  letter-spacing: 0.04em;
+}
+
+@keyframes decodingBlurPulse {
+  0% { filter: blur(12px) brightness(0.92); }
+  50% { filter: blur(18px) brightness(1.06); }
+  100% { filter: blur(12px) brightness(0.92); }
+}
+
+.plate-count-tag {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--td-radius-small, 4px);
+  z-index: 2;
+  pointer-events: none;
+}
+.plate-count-tag.warn { color: #ffb84d; }
+
+.right-pane .right-content {
+  display: flex;
+  flex-direction: column;
+  height: var(--panel-media-height);
+  min-height: var(--panel-media-height);
+  max-height: var(--panel-media-height);
+  gap: var(--space-sm);
+  overflow: auto;
+}
+
+.empty-result {
+  border: 1px dashed var(--td-component-stroke, #e8e8e8);
+  border-radius: var(--td-radius-medium);
+  color: var(--td-text-color-placeholder);
+  font-size: 13px;
+  padding: var(--space-sm);
+}
+
+.plate-list { display: flex; flex-direction: column; gap: var(--space-xs); }
+.plate-select-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 14px;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.plate-select-card:hover { border-color: var(--td-brand-color); background: var(--td-bg-color-container-hover, #fafafa); }
+.plate-select-card.selected { border-color: var(--td-brand-color); border-width: 2px; background: var(--td-bg-color-secondarycontainer, #f5f5f5); }
+.plate-select-num { font-size: 13px; font-weight: 700; color: var(--td-text-color-placeholder); width: 18px; text-align: center; flex-shrink: 0; }
+.plate-select-card.selected .plate-select-num { color: var(--td-text-color-primary); }
+.plate-select-info { display: flex; flex-direction: column; gap: var(--space-xxs); flex: 1; align-items: flex-start; }
+.plate-select-conf { font-size: 18px; font-weight: 700; color: var(--td-text-color-primary); flex-shrink: 0; line-height: 1.2; }
+.plate-select-conf--warn { color: var(--td-warning-color, #e37318); }
+.plate-uncertain-hint { font-size: 11px; color: var(--td-warning-color); }
+.no-plate-notice {
+  font-size: 13px;
+  color: var(--td-warning-color);
+  padding: 12px;
+  background: var(--td-warning-color-1, #fff3e0);
+  border-radius: var(--td-radius-medium);
+}
+
+.feedback-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; }
+.feedback-warn-hint { margin: calc(-1 * var(--space-xxs)) 0 0; font-size: 12px; color: var(--td-warning-color); }
+
+/* 关键：按钮区贴底，与左侧图片区下边缘对齐 */
+.result-actions-td {
+  width: 100%;
+  margin-top: auto;
+}
 </style>

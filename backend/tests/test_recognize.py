@@ -43,3 +43,13 @@ def test_recognize_with_sr_applies_enhancement():
         assert sr_module.sr_service.enhance_crop_with_timeout.called
     finally:
         sr_module.sr_service.enhance_crop_with_timeout = original_fn
+
+
+def test_low_confidence_runs_refine_routes():
+    from recognize import RecognizeService
+    svc = RecognizeService.__new__(RecognizeService)
+    # first call: full image detect, then crop routes in recognize()
+    svc._catcher = MagicMock(side_effect=[MOCK_LOW_CONF, MOCK_HIGH_CONF, MOCK_HIGH_CONF])
+    result = svc.recognize(make_blank_image())
+    assert len(result["plates"]) == 1
+    assert result["plates"][0].confidence >= 0.9

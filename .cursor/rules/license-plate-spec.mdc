@@ -1,0 +1,23 @@
+---
+description: Enforce unified license plate normalization and blur-handling pipeline
+alwaysApply: true
+---
+
+# License Plate Global Rules
+
+- Use one shared normalization rule set for all plate outputs (detect, SR, history, export).
+- Never display or persist raw model plate text directly when it violates plate format constraints.
+- Normalize by plate type:
+  - `blue/yellow/white/black`: 7 chars total (`province + city + 5`)
+  - `green_small`: 8 chars total (`province + city + 6`, last char must be `D` or `F`)
+- Allowed alphanumerics exclude `I` and `O`; unsupported chars must be replaced with `?`.
+- Keep confidence and bbox as model outputs, but prioritize normalized text for UI and persistence.
+- For motion-blur scenes, run a lightweight enhancement route before/alongside SR:
+  - CLAHE
+  - denoise (bilateral)
+  - unsharp mask
+- When multiple recognition routes are available, select by combined score:
+  - confidence
+  - format validity (fewer `?`, type-consistent length, green suffix check)
+  - keep deterministic tie-breakers.
+

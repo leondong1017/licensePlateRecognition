@@ -49,3 +49,21 @@ def test_delete_record(db):
 def test_delete_nonexistent(db):
     result = db.delete_record(999)
     assert result is None
+
+
+def test_update_feedback(db):
+    rid = db.insert_record("img/1.jpg", [SAMPLE_PLATE], used_sr=False)
+    assert db.update_feedback(rid, "accurate") is True
+    row = db.get_record(rid)
+    assert row["user_feedback"] == "accurate"
+    assert db.update_feedback(rid, "inaccurate") is True
+    assert db.get_record(rid)["user_feedback"] == "inaccurate"
+    assert db.update_feedback(rid, None) is True
+    assert db.get_record(rid)["user_feedback"] is None
+
+def test_delete_all_records(db):
+    db.insert_record("img/1.jpg", [SAMPLE_PLATE], used_sr=False)
+    db.insert_record("img/2.jpg", [SAMPLE_PLATE], used_sr=False)
+    deleted_paths = db.delete_all_records()
+    assert len(deleted_paths) == 2
+    assert db.list_records()["total"] == 0
